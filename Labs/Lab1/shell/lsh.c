@@ -22,6 +22,7 @@
 #include <readline/readline.h>
 #include <readline/history.h>
 #include <string.h>
+#include <unistd.h>
 #include "parse.h"
 
 /*
@@ -31,6 +32,9 @@ void ExecuteCommand(int, Command *);
 void PrintCommand(int, Command *);
 void PrintPgm(Pgm *);
 void stripwhite(char *);
+void rec(Pgm *, int);
+int execSingle(char **);
+int exec(char **, int, int);
 
 /* When non-zero, this global means the user is done using this program. */
 int done = 0;
@@ -66,7 +70,12 @@ int main(void)
                 /* execute it */
                 n = parse(line, &cmd);
                 // PrintCommand(n, &cmd);
-                ExecuteCommand(n, &cmd);
+                // ExecuteCommand(n, &cmd);
+                if (cmd.pgm->next) {
+                    rec(cmd.pgm, 1);
+                } else {
+                    execSingle(cmd.pgm->pgmlist); 
+                }
             }
         }
         
@@ -108,6 +117,94 @@ void ExecuteCommand(int n, Command *cmd) {
             wait(NULL);
         }
     }
+}
+
+#define READ 0
+#define WRITE 1
+int fds[2];
+void rec(Pgm * pgm, int last) {
+    pipe(fds);
+    
+    if (pgm->next != NULL) {
+        rec(pgm->next, 0);
+
+        if (last) {
+            printf("Printing last command\n");
+            exec(pgm->pgmlist, fds[READ], 0);
+        } else {
+            exec(pgm->pgmlist, fds[READ], fds[WRITE]);
+        }
+
+    } else {
+        exec(pgm->pgmlist, 0, fds[WRITE]);
+        printf("pipe[0]: %d, pipe[1]: %d\n", fds[READ], fds[WRITE]);
+    }
+}
+
+
+int execSingle(char ** args) {
+    pid_t pid;
+
+    signal(SIGCHLD, SIG_IGN);
+    pid = fork();
+    if (pid == 0) {
+        // child process
+        if(execvp(args[0], args) == -1) {
+            // something went wrong
+            fprintf(stderr, "-lsh: %s: ", args[0]);
+            perror("");
+        }
+    } else if (pid < 0) {
+        // could not fork
+        perror("Could not fork");
+    } else {
+        wait(NULL);
+    }
+}
+
+int exec(char ** args, int in, int out) {
+    pid_t pid;
+    printf("EXECUTING COMMAND %s, in: %d, out: %d\n", args[0], in, out);
+    pid = fork();
+
+    if (pid == 0) {
+        // child process
+        
+        if (in != 0) {
+            // read from pipe
+            if (dup2(in, STDIN_FILENO) != STDIN_FILENO) {
+                perror("dup in child when reading from pipe");
+            } else {
+                printf("reading from pipe");
+            }
+            close(in);
+        }
+
+        if (out != 0) {
+            // write to pipe
+            printf("jag är her");
+            if (dup2(out, STDOUT_FILENO) != STDOUT_FILENO) {
+                perror("dup in child when writing to pipe");
+            } else {
+                printf("writing to pipe\n");
+            }
+            printf("asd");
+            int ret = close(out);
+            printf("CLOSE ret: %d\n", ret);
+        }
+
+        return execvp(args[0], args);
+    } else if (pid < 0) {
+        perror("Could not fork()");
+    } else {
+        // parent process
+        /*close(in);*/
+        /*close(out);*/
+        wait(NULL);
+    }
+
+    printf("exec() done\n");
+    return pid;
 }
 
 /*
