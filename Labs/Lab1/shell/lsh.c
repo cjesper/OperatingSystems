@@ -129,15 +129,14 @@ void rec(Pgm * pgm, int last) {
         rec(pgm->next, 0);
 
         if (last) {
-            printf("Printing last command\n");
             exec(pgm->pgmlist, fds[READ], 0);
+            printf("LAST DONE\n");
         } else {
             exec(pgm->pgmlist, fds[READ], fds[WRITE]);
         }
 
     } else {
         exec(pgm->pgmlist, 0, fds[WRITE]);
-        printf("pipe[0]: %d, pipe[1]: %d\n", fds[READ], fds[WRITE]);
     }
 }
 
@@ -163,47 +162,45 @@ int execSingle(char ** args) {
 }
 
 int exec(char ** args, int in, int out) {
+    int status;
     pid_t pid;
     printf("EXECUTING COMMAND %s, in: %d, out: %d\n", args[0], in, out);
     pid = fork();
 
     if (pid == 0) {
         // child process
+        printf("I AM A CHILD! in: %d, out: %d\n", in, out);
         
         if (in != 0) {
             // read from pipe
             if (dup2(in, STDIN_FILENO) != STDIN_FILENO) {
                 perror("dup in child when reading from pipe");
-            } else {
-                printf("reading from pipe");
             }
             close(in);
         }
 
         if (out != 0) {
             // write to pipe
-            printf("jag är her");
             if (dup2(out, STDOUT_FILENO) != STDOUT_FILENO) {
                 perror("dup in child when writing to pipe");
-            } else {
-                printf("writing to pipe\n");
-            }
-            printf("asd");
-            int ret = close(out);
-            printf("CLOSE ret: %d\n", ret);
+            } 
+            close(out);
         }
 
-        return execvp(args[0], args);
+        if (execvp(args[0], args) == -1) {
+            perror("exec()");
+        }
     } else if (pid < 0) {
         perror("Could not fork()");
     } else {
         // parent process
-        /*close(in);*/
-        /*close(out);*/
-        wait(NULL);
+        int endID = waitpid(pid, &status, WNOHANG|WUNTRACED);
+        // TODO handle child end and make sure no print is done before child prints
+        // TODO also make sure bg processes are implemented
+        printf("parent done waiting for forking child\n");
     }
 
-    printf("exec() done\n");
+    printf("EXECUTION DONE\n");
     return pid;
 }
 
