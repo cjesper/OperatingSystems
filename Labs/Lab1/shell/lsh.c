@@ -21,6 +21,7 @@
 #include <stdlib.h>
 #include <readline/readline.h>
 #include <readline/history.h>
+#include <string.h>
 #include "parse.h"
 
 /*
@@ -84,19 +85,28 @@ int main(void)
  */
 void ExecuteCommand(int n, Command *cmd) {
     pid_t pid;
+    char ** commandList = cmd->pgm->pgmlist;
+    int status;
 
+    signal(SIGCHLD, SIG_IGN);
     pid = fork();
     if (pid == 0) {
         // child process
-        if(execvp(cmd->pgm->pgmlist[0], cmd->pgm->pgmlist) == -1) {
+        if(execvp(commandList[0], commandList) == -1) {
             // something went wrong
-            perror("Could not execute command");
+            fprintf(stderr, "-lsh: %s: ", commandList[0]);
+            perror("");
         }
     } else if (pid < 0) {
         // could not fork
         perror("Could not fork");
     } else {
-        wait(NULL);
+        if (cmd->bakground) {
+            // do something?
+            // waitpid(pid, &status, WNOHANG);
+        } else {
+            wait(NULL);
+        }
     }
 }
 
