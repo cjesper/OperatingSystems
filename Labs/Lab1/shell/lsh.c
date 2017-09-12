@@ -26,7 +26,7 @@
 /*
  * Function declarations
  */
-
+void ExecuteCommand(int, Command *);
 void PrintCommand(int, Command *);
 void PrintPgm(Pgm *);
 void stripwhite(char *);
@@ -64,7 +64,8 @@ int main(void)
                 add_history(line);
                 /* execute it */
                 n = parse(line, &cmd);
-                PrintCommand(n, &cmd);
+                // PrintCommand(n, &cmd);
+                ExecuteCommand(n, &cmd);
             }
         }
         
@@ -73,6 +74,30 @@ int main(void)
         }
     }
     return 0;
+}
+
+/*
+ * Name: ExecuteCommand
+ *
+ * Description: Executes a command
+ *
+ */
+void ExecuteCommand(int n, Command *cmd) {
+    pid_t pid;
+
+    pid = fork();
+    if (pid == 0) {
+        // child process
+        if(execvp(cmd->pgm->pgmlist[0], cmd->pgm->pgmlist) == -1) {
+            // something went wrong
+            perror("Could not execute command");
+        }
+    } else if (pid < 0) {
+        // could not fork
+        perror("Could not fork");
+    } else {
+        wait(NULL);
+    }
 }
 
 /*
