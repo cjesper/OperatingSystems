@@ -22,18 +22,23 @@
 #include <readline/readline.h>
 #include <readline/history.h>
 #include <string.h>
+#include <unistd.h>
 #include "parse.h"
 
 /*
  * Function declarations
  */
 void ExecuteCommand(int, Command *);
+void ExecuteSingleCommand(char **, int);
 void PrintCommand(int, Command *);
 void PrintPgm(Pgm *);
 void stripwhite(char *);
 
 /* When non-zero, this global means the user is done using this program. */
 int done = 0;
+
+#define READ 0
+#define WRITE 1
 
 /*
  * Name: main
@@ -65,8 +70,8 @@ int main(void)
                 add_history(line);
                 /* execute it */
                 n = parse(line, &cmd);
-                // PrintCommand(n, &cmd);
                 ExecuteCommand(n, &cmd);
+                // PrintCommand(n, &cmd);
             }
         }
         
@@ -85,23 +90,50 @@ int main(void)
  */
 void ExecuteCommand(int n, Command *cmd) {
     pid_t pid;
-    char ** commandList = cmd->pgm->pgmlist;
+    char ** args = cmd->pgm->pgmlist;
+    int fds[2];
+    pipe(fds);
+    
+    dup2(fds[WRITE], STDOUT_FILENO);
+    ExecuteSingleCommand(cmd->pgm->next->pgmlist, cmd->bakground);
+    close(fds[WRITE]);
+    dup2(fds[READ], STDIN_FILENO);
+    ExecuteSingleCommand(cmd->pgm->pgmlist, cmd->bakground);
+    close(fds[READ]);
+}
+
+
+/**
+ * Name: ExecuteSingleCommand
+ *
+ * Description: Executes a single command, when piping is not necessary
+ *
+ */
+void ExecuteSingleCommand(char ** args, bg) {
+    pid_t pid;
     int status;
 
-    signal(SIGCHLD, SIG_IGN);
+    // handle program exit
+    if (strcmp("exit", args[0]) == 0) {
+        done = 1;
+        return;
+    }
+
+    signal(SIGCHLD, SIG_IGN); // kill children
+
     pid = fork();
     if (pid == 0) {
         // child process
-        if(execvp(commandList[0], commandList) == -1) {
+        if(execvp(args[0], args) == -1) {
             // something went wrong
-            fprintf(stderr, "-lsh: %s: ", commandList[0]);
+            fprintf(stderr, "-lsh: %s: ", args[0]);
             perror("");
         }
     } else if (pid < 0) {
         // could not fork
         perror("Could not fork");
     } else {
-        if (cmd->bakground) {
+        if (bg) {
             // do something?
             // waitpid(pid, &status, WNOHANG);
         } else {
