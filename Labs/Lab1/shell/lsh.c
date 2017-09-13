@@ -22,15 +22,18 @@
 #include <readline/readline.h>
 #include <readline/history.h>
 #include <string.h>
+#include <unistd.h>
 #include "parse.h"
 
 /*
  * Function declarations
  */
-void ExecuteCommand(int, Command *);
 void PrintCommand(int, Command *);
 void PrintPgm(Pgm *);
 void stripwhite(char *);
+void rec(Pgm *, int);
+int execSingle(char **, int);
+int exec(char **, int, int);
 
 /* When non-zero, this global means the user is done using this program. */
 int done = 0;
@@ -66,7 +69,12 @@ int main(void)
                 /* execute it */
                 n = parse(line, &cmd);
                 // PrintCommand(n, &cmd);
-                ExecuteCommand(n, &cmd);
+                // ExecuteCommand(n, &cmd);
+                if (cmd.pgm->next) {
+                    rec(cmd.pgm, 1);
+                } else {
+                    execSingle(cmd.pgm->pgmlist, cmd.bakground); 
+                }
             }
         }
         
@@ -77,37 +85,93 @@ int main(void)
     return 0;
 }
 
-/*
- * Name: ExecuteCommand
- *
- * Description: Executes a command
- *
- */
-void ExecuteCommand(int n, Command *cmd) {
-    pid_t pid;
-    char ** commandList = cmd->pgm->pgmlist;
-    int status;
+#define READ 0
+#define WRITE 1
+int fds[2];
+void rec(Pgm * pgm, int last) {
+    pipe(fds);
+    
+    if (pgm->next != NULL) {
+        rec(pgm->next, 0);
 
+        if (last) {
+            exec(pgm->pgmlist, fds[READ], 0);
+            printf("LAST DONE\n");
+        } else {
+            exec(pgm->pgmlist, fds[READ], fds[WRITE]);
+        }
+
+    } else {
+        exec(pgm->pgmlist, 0, fds[WRITE]);
+    }
+}
+
+
+int execSingle(char ** args, int background) {
+    pid_t pid;
+    int status;
     signal(SIGCHLD, SIG_IGN);
     pid = fork();
     if (pid == 0) {
         // child process
-        if(execvp(commandList[0], commandList) == -1) {
+        if(execvp(args[0], args) == -1) {
             // something went wrong
-            fprintf(stderr, "-lsh: %s: ", commandList[0]);
+            fprintf(stderr, "-lsh: %s: ", args[0]);
             perror("");
         }
     } else if (pid < 0) {
         // could not fork
         perror("Could not fork");
     } else {
-        if (cmd->bakground) {
-            // do something?
-            // waitpid(pid, &status, WNOHANG);
-        } else {
+        if (!background) {
             wait(NULL);
         }
     }
+}
+
+int exec(char ** args, int in, int out) {
+    int status;
+    pid_t pid;
+    printf("EXECUTING COMMAND %s, in: %d, out: %d\n", args[0], in, out);
+    pid = fork();
+
+    if (pid == 0) {
+        // child process
+        printf("I AM A CHILD! in: %d, out: %d\n", in, out);
+        
+        if (in != 0) {
+            // read from pipe
+            if (dup2(in, STDIN_FILENO) != STDIN_FILENO) {
+                perror("dup in child when reading from pipe");
+            }
+            close(in);
+        }
+
+        if (out != 0) {
+            // write to pipe
+            if (dup2(out, STDOUT_FILENO) != STDOUT_FILENO) {
+                perror("dup in child when writing to pipe");
+            } 
+            close(out);
+        }
+
+        if (execvp(args[0], args) == -1) {
+            perror("exec()");
+        }
+    } else if (pid < 0) {
+        perror("Could not fork()");
+    } else {
+        // parent process
+        int endID = waitpid(-1, &status, WNOHANG);
+        printf("Endid is : %d, Status is : %d\n", endID, status);
+        if (endID == -1) {
+            perror("ERROR: ");
+        }
+        // TODO handle child end and make sure no print is done before child prints
+        // TODO also make sure bg processes are implemented
+        printf("parent done waiting for forking child\n");
+    }
+    return pid;
 }
 
 /*
