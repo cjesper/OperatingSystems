@@ -32,6 +32,7 @@
 void PrintCommand(int, Command *);
 void PrintPgm(Pgm *);
 void stripwhite(char *);
+void interruptHandler(int);
 void execute(Pgm *, int, int, int);
 
 /* When non-zero, this global means the user is done using this program. */
@@ -58,6 +59,8 @@ int main(void)
     saved_stdout = dup(STDOUT_FILENO);
     int saved_stdin;
     saved_stdin = dup(STDIN_FILENO);
+
+    signal(SIGINT, interruptHandler);
 
     while (!done) {
         char *line;
@@ -124,7 +127,7 @@ int main(void)
 
                     // wait for child if not background
                     if (!cmd.bakground) {
-                        wait(NULL);
+                        waitpid(pid, NULL, 0);
                     } else {
                         printf("Command %s started in background with PID [%d]\n", cmd.pgm->pgmlist[0], pid);
                     }
@@ -142,6 +145,12 @@ int main(void)
     return 0;
 }
 
+void interruptHandler(int sig) {
+    // print newline for better output
+    signal(SIGINT, SIG_IGN);
+    printf("\n");
+}
+
 void execute(Pgm * pgm, int background, int stdinFD, int stdoutFD) {
     
     if (pgm->next == NULL) {
@@ -153,6 +162,7 @@ void execute(Pgm * pgm, int background, int stdinFD, int stdoutFD) {
         /*printf("Reading from stdin, command %s\n", pgm->pgmlist[0]);*/
         /*exec(pgm->pgmlist, 0, fds[WRITE], stdinFD, 0);*/
         pid_t pid;
+        signal(SIGCHLD, SIG_IGN);
 
         int fds[2];
         fds[READ] = stdinFD;
