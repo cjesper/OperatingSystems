@@ -28,12 +28,11 @@
 /*
  * Function declarations
  */
-void ExecuteCommand(int, Command *);
 void PrintCommand(int, Command *);
 void PrintPgm(Pgm *);
 void stripwhite(char *);
 void rec(Pgm *, int);
-int execSingle(char **);
+int execSingle(char **, int);
 int exec(char **, int, int);
 
 /* When non-zero, this global means the user is done using this program. */
@@ -72,11 +71,9 @@ int main(void)
                 // PrintCommand(n, &cmd);
                 // ExecuteCommand(n, &cmd);
                 if (cmd.pgm->next) {
-                    printf("Executing rec\n");
                     rec(cmd.pgm, 1);
                 } else {
-                    printf("Executing single\n");
-                    execSingle(cmd.pgm->pgmlist); 
+                    execSingle(cmd.pgm->pgmlist, cmd.bakground); 
                 }
             }
         }
@@ -86,38 +83,6 @@ int main(void)
         }
     }
     return 0;
-}
-
-/*
- * Name: ExecuteCommand
- *
- * Description: Executes a command
- *
- */
-void ExecuteCommand(int n, Command *cmd) {
-    pid_t pid;
-    char ** commandList = cmd->pgm->pgmlist;
-    int status;
-    signal(SIGCHLD, SIG_IGN);
-    pid = fork();
-    if (pid == 0) {
-        // child process
-        if(execvp(commandList[0], commandList) == -1) {
-            // something went wrong
-            fprintf(stderr, "-lsh: %s: ", commandList[0]);
-            perror("");
-        }
-    } else if (pid < 0) {
-        // could not fork
-        perror("Could not fork");
-    } else {
-        if (cmd->bakground) {
-            // do something?
-            // waitpid(pid, &status, WNOHANG);
-        } else {
-            wait(NULL);
-        }
-    }
 }
 
 #define READ 0
@@ -142,7 +107,7 @@ void rec(Pgm * pgm, int last) {
 }
 
 
-int execSingle(char ** args) {
+int execSingle(char ** args, int background) {
     pid_t pid;
     int status;
     signal(SIGCHLD, SIG_IGN);
@@ -158,7 +123,9 @@ int execSingle(char ** args) {
         // could not fork
         perror("Could not fork");
     } else {
-        int endID = waitpid(-1, &status, WNOHANG);
+        if (!background) {
+            wait(NULL);
+        }
     }
 }
 
