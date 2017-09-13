@@ -80,6 +80,18 @@ int main(void)
                 n = parse(line, &cmd);
                 // PrintCommand(n, &cmd);
 
+                // handle exit
+                if (strcmp(cmd.pgm->pgmlist[0], "exit") == 0) {
+                    printf("Goodbye.\n");
+                    exit(EXIT_SUCCESS);
+                }
+                
+                // handle cd
+                if (strncmp(cmd.pgm->pgmlist[0], "cd", 2) == 0) {
+                    chdir(cmd.pgm->pgmlist[1]);
+                    continue;
+                }
+
                 int stdinFD = 0, stdoutFD = 0;
                 if (cmd.rstdin != NULL) {
                    stdinFD = open(cmd.rstdin, O_CREAT|O_RDWR);
