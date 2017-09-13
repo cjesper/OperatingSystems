@@ -23,6 +23,7 @@
 #include <readline/history.h>
 #include <string.h>
 #include <unistd.h>
+#include <fcntl.h>
 #include "parse.h"
 
 /*
@@ -31,12 +32,16 @@
 void PrintCommand(int, Command *);
 void PrintPgm(Pgm *);
 void stripwhite(char *);
-void rec(Pgm *, int);
-int execSingle(char **, int);
-int exec(char **, int, int);
+void execute(Pgm *, int, int, int);
 
 /* When non-zero, this global means the user is done using this program. */
 int done = 0;
+
+/*
+ * Constans used when accessing FDs
+ */
+#define READ 0
+#define WRITE 1
 
 /*
  * Name: main
@@ -48,6 +53,11 @@ int main(void)
 {
     Command cmd;
     int n;
+
+    int saved_stdout;
+    saved_stdout = dup(STDOUT_FILENO);
+    int saved_stdin;
+    saved_stdin = dup(STDIN_FILENO);
 
     while (!done) {
         char *line;
@@ -69,11 +79,46 @@ int main(void)
                 /* execute it */
                 n = parse(line, &cmd);
                 // PrintCommand(n, &cmd);
-                // ExecuteCommand(n, &cmd);
-                if (cmd.pgm->next) {
-                    rec(cmd.pgm, 1);
+
+                int stdinFD = 0, stdoutFD = 0;
+                if (cmd.rstdin != NULL) {
+                   stdinFD = open(cmd.rstdin, O_CREAT|O_RDWR);
+                   if (stdinFD < 0) {
+                       perror("Could not create file descriptor");
+                   }
+                   dup2(stdinFD, STDIN_FILENO);
                 } else {
-                    execSingle(cmd.pgm->pgmlist, cmd.bakground); 
+                    stdinFD = saved_stdin;                
+                }
+                if (cmd.rstdout != NULL) {
+                   stdoutFD = open(cmd.rstdout, O_CREAT|O_RDWR, 0644);
+                   if (stdoutFD < 0) {
+                       perror("Could not create file descriptor");
+                   }
+                   dup2(stdoutFD, STDOUT_FILENO);
+                } else {
+                    stdoutFD = saved_stdout;
+                }
+
+                pid_t pid = fork();
+                if (pid < 0) {
+                    // error
+                    perror("could not fork");
+                } else if (pid == 0) {
+                    // child
+                    execute(cmd.pgm, cmd.bakground, stdinFD, stdoutFD);
+                } else {
+                    // parent
+
+                    // wait for child if not background
+                    if (!cmd.bakground) {
+                        wait(NULL);
+                    } else {
+                        printf("Command %s started in background with PID [%d]\n", cmd.pgm->pgmlist[0], pid);
+                    }
+
+                    dup2(saved_stdin, STDIN_FILENO);
+                    dup2(saved_stdout, STDOUT_FILENO);
                 }
             }
         }
@@ -85,93 +130,47 @@ int main(void)
     return 0;
 }
 
-#define READ 0
-#define WRITE 1
-int fds[2];
-void rec(Pgm * pgm, int last) {
-    pipe(fds);
+void execute(Pgm * pgm, int background, int stdinFD, int stdoutFD) {
     
-    if (pgm->next != NULL) {
-        rec(pgm->next, 0);
+    if (pgm->next == NULL) {
+        if (execvp(pgm->pgmlist[0], pgm->pgmlist) < 0) {
+            // error
+            perror("could not execute function");
+        }
+    } else {
+        /*printf("Reading from stdin, command %s\n", pgm->pgmlist[0]);*/
+        /*exec(pgm->pgmlist, 0, fds[WRITE], stdinFD, 0);*/
+        pid_t pid;
 
-        if (last) {
-            exec(pgm->pgmlist, fds[READ], 0);
-            printf("LAST DONE\n");
+        int fds[2];
+        fds[READ] = stdinFD;
+        fds[WRITE] = stdoutFD;
+
+        if (pipe(fds) != 0) {
+            perror("pipe error");
+        }
+
+        if ((pid = fork()) < 0) {
+            perror("could not fork");
+        } else if (pid == 0) {
+            // child
+            dup2(fds[WRITE], STDOUT_FILENO);
+            close(fds[WRITE]);
+            execute(pgm->next, background, stdinFD, stdoutFD);
         } else {
-            exec(pgm->pgmlist, fds[READ], fds[WRITE]);
-        }
+            // parent
+            dup2(fds[READ], STDIN_FILENO);
+            close(fds[READ]);
+            close(fds[WRITE]);
 
-    } else {
-        exec(pgm->pgmlist, 0, fds[WRITE]);
-    }
-}
-
-
-int execSingle(char ** args, int background) {
-    pid_t pid;
-    int status;
-    signal(SIGCHLD, SIG_IGN);
-    pid = fork();
-    if (pid == 0) {
-        // child process
-        if(execvp(args[0], args) == -1) {
-            // something went wrong
-            fprintf(stderr, "-lsh: %s: ", args[0]);
-            perror("");
-        }
-    } else if (pid < 0) {
-        // could not fork
-        perror("Could not fork");
-    } else {
-        if (!background) {
+            // wait for child
             wait(NULL);
-        }
-    }
-}
 
-int exec(char ** args, int in, int out) {
-    int status;
-    pid_t pid;
-    printf("EXECUTING COMMAND %s, in: %d, out: %d\n", args[0], in, out);
-    pid = fork();
-
-    if (pid == 0) {
-        // child process
-        printf("I AM A CHILD! in: %d, out: %d\n", in, out);
-        
-        if (in != 0) {
-            // read from pipe
-            if (dup2(in, STDIN_FILENO) != STDIN_FILENO) {
-                perror("dup in child when reading from pipe");
+            if (execvp(pgm->pgmlist[0], pgm->pgmlist) < 0) {
+                perror("could not execute function");
             }
-            close(in);
         }
-
-        if (out != 0) {
-            // write to pipe
-            if (dup2(out, STDOUT_FILENO) != STDOUT_FILENO) {
-                perror("dup in child when writing to pipe");
-            } 
-            close(out);
-        }
-
-        if (execvp(args[0], args) == -1) {
-            perror("exec()");
-        }
-    } else if (pid < 0) {
-        perror("Could not fork()");
-    } else {
-        // parent process
-        int endID = waitpid(-1, &status, WNOHANG);
-        printf("Endid is : %d, Status is : %d\n", endID, status);
-        if (endID == -1) {
-            perror("ERROR: ");
-        }
-        // TODO handle child end and make sure no print is done before child prints
-        // TODO also make sure bg processes are implemented
-        printf("parent done waiting for forking child\n");
     }
-    return pid;
 }
 
 /*
