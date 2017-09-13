@@ -72,8 +72,10 @@ int main(void)
                 // PrintCommand(n, &cmd);
                 // ExecuteCommand(n, &cmd);
                 if (cmd.pgm->next) {
+                    printf("Executing rec\n");
                     rec(cmd.pgm, 1);
                 } else {
+                    printf("Executing single\n");
                     execSingle(cmd.pgm->pgmlist); 
                 }
             }
@@ -96,7 +98,6 @@ void ExecuteCommand(int n, Command *cmd) {
     pid_t pid;
     char ** commandList = cmd->pgm->pgmlist;
     int status;
-
     signal(SIGCHLD, SIG_IGN);
     pid = fork();
     if (pid == 0) {
@@ -143,7 +144,7 @@ void rec(Pgm * pgm, int last) {
 
 int execSingle(char ** args) {
     pid_t pid;
-
+    int status;
     signal(SIGCHLD, SIG_IGN);
     pid = fork();
     if (pid == 0) {
@@ -157,7 +158,7 @@ int execSingle(char ** args) {
         // could not fork
         perror("Could not fork");
     } else {
-        wait(NULL);
+        int endID = waitpid(-1, &status, WNOHANG);
     }
 }
 
@@ -194,13 +195,15 @@ int exec(char ** args, int in, int out) {
         perror("Could not fork()");
     } else {
         // parent process
-        int endID = waitpid(pid, &status, WNOHANG|WUNTRACED);
+        int endID = waitpid(-1, &status, WNOHANG);
+        printf("Endid is : %d, Status is : %d\n", endID, status);
+        if (endID == -1) {
+            perror("ERROR: ");
+        }
         // TODO handle child end and make sure no print is done before child prints
         // TODO also make sure bg processes are implemented
         printf("parent done waiting for forking child\n");
     }
-
-    printf("EXECUTION DONE\n");
     return pid;
 }
 
