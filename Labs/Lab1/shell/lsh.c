@@ -129,6 +129,7 @@ int main(void)
                     if (!cmd.bakground) {
                         waitpid(pid, NULL, 0);
                     } else {
+                        signal(SIGCHLD, SIG_IGN);
                         printf("Command %s started in background with PID [%d]\n", cmd.pgm->pgmlist[0], pid);
                     }
 
@@ -147,7 +148,6 @@ int main(void)
 
 void interruptHandler(int sig) {
     // print newline for better output
-    signal(SIGINT, SIG_IGN);
     printf("\n");
 }
 
@@ -162,7 +162,6 @@ void execute(Pgm * pgm, int background, int stdinFD, int stdoutFD) {
         /*printf("Reading from stdin, command %s\n", pgm->pgmlist[0]);*/
         /*exec(pgm->pgmlist, 0, fds[WRITE], stdinFD, 0);*/
         pid_t pid;
-        signal(SIGCHLD, SIG_IGN);
 
         int fds[2];
         fds[READ] = stdinFD;
