@@ -24,6 +24,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <fcntl.h>
+#include <ctype.h>
 #include "parse.h"
 
 /*
@@ -55,11 +56,13 @@ int main(void)
     Command cmd;
     int n;
 
+    /* Stash stdin and stdout for further use */
     int saved_stdout;
     saved_stdout = dup(STDOUT_FILENO);
     int saved_stdin;
     saved_stdin = dup(STDIN_FILENO);
 
+    /* Register handler for interrupt */
     signal(SIGINT, interruptHandler);
 
     while (!done) {
@@ -79,22 +82,21 @@ int main(void)
 
             if(*line) {
                 add_history(line);
-                /* execute it */
                 n = parse(line, &cmd);
-                // PrintCommand(n, &cmd);
 
-                // handle exit
+                /* Handle user exit */
                 if (strcmp(cmd.pgm->pgmlist[0], "exit") == 0) {
                     printf("Goodbye.\n");
                     exit(EXIT_SUCCESS);
                 }
                 
-                // handle cd
+                /* Make it possible for user to change directory */
                 if (strncmp(cmd.pgm->pgmlist[0], "cd", 2) == 0) {
                     chdir(cmd.pgm->pgmlist[1]);
                     continue;
                 }
 
+                /* If applicable, redirect stdin and stdout to files */
                 int stdinFD = 0, stdoutFD = 0;
                 if (cmd.rstdin != NULL) {
                    stdinFD = open(cmd.rstdin, O_CREAT|O_RDWR);
@@ -117,15 +119,12 @@ int main(void)
 
                 pid_t pid = fork();
                 if (pid < 0) {
-                    // error
                     perror("could not fork");
                 } else if (pid == 0) {
-                    // child
+                    /* Child process initiates execution sequence */
                     execute(cmd.pgm, cmd.bakground, stdinFD, stdoutFD);
                 } else {
-                    // parent
-
-                    // wait for child if not background
+                    /* Let parent wait for child if running in background */
                     if (!cmd.bakground) {
                         waitpid(pid, NULL, 0);
                     } else {
@@ -133,6 +132,7 @@ int main(void)
                         printf("Command %s started in background with PID [%d]\n", cmd.pgm->pgmlist[0], pid);
                     }
 
+                    /* Restore stdin and stdout */
                     dup2(saved_stdin, STDIN_FILENO);
                     dup2(saved_stdout, STDOUT_FILENO);
                 }
@@ -146,24 +146,30 @@ int main(void)
     return 0;
 }
 
+/*
+ * Does nothing on interrupt signal but prints new line for better output.
+ */
 void interruptHandler(int sig) {
     // print newline for better output
     printf("\n");
 }
 
+/*
+ * Recursive method for executing commands.
+ */
 void execute(Pgm * pgm, int background, int stdinFD, int stdoutFD) {
     
+    /* When last command is reached, execute command start returning to the other commands */
     if (pgm->next == NULL) {
-        if (execvp(pgm->pgmlist[0], pgm->pgmlist) < 0) {
-            // error
+        if (execvp(pgm->pgmlist[0], pgm->pgmlist) < 0) {
             perror("could not execute function");
+            exit(EXIT_FAILURE);
         }
     } else {
-        /*printf("Reading from stdin, command %s\n", pgm->pgmlist[0]);*/
-        /*exec(pgm->pgmlist, 0, fds[WRITE], stdinFD, 0);*/
         pid_t pid;
 
         int fds[2];
+        int result;
         fds[READ] = stdinFD;
         fds[WRITE] = stdoutFD;
 
@@ -171,24 +177,23 @@ void execute(Pgm * pgm, int background, int stdinFD, int stdoutFD) {
             perror("pipe error");
         }
 
+        /* Start execution chain */
         if ((pid = fork()) < 0) {
             perror("could not fork");
         } else if (pid == 0) {
-            // child
             dup2(fds[WRITE], STDOUT_FILENO);
             close(fds[WRITE]);
             execute(pgm->next, background, stdinFD, stdoutFD);
         } else {
-            // parent
             dup2(fds[READ], STDIN_FILENO);
             close(fds[READ]);
             close(fds[WRITE]);
 
-            // wait for child
             wait(NULL);
 
             if (execvp(pgm->pgmlist[0], pgm->pgmlist) < 0) {
-                perror("could not execute function");
+                perror("Could not execute function");
+                exit(EXIT_FAILURE);
             }
         }
     }
