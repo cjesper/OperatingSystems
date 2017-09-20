@@ -8,8 +8,8 @@
 
 >> Fill in the names and email addresses of your group members.
 
-FirstName LastName <email@domain.example>
-FirstName LastName <email@domain.example>
+Axel Niklasson axelni@student.chalmers.se
+Jesper Carlsson cjesper@student.chalmers.se
 
 ---- PRELIMINARIES ----
 
@@ -31,9 +31,14 @@ which parts.
 
 >> L1: How many hours did each team member spend on this assignment?
    Make sure that each member's total time is listed.
+Axel: ~20 hours
+Jesper: ~20 hours
 
 >> L2: What did each team member focus on for this assignment?  Keep
    descriptions to 25-30 words or less.
+We only worked together and used pair programming to finish the assignment, but 
+in general Axel focused on program architecture and error handling and Jesper on pipes and 
+the more general shell implementation.
 
 
 			  SURVEY QUESTIONS
@@ -47,19 +52,27 @@ penalized.  We can't fix things until we know about them.  :-)
 
 >> In your opinion, was this assignment, or any of the parts of it, too
 >> easy or too hard?  Did it take too long or too little time?
+It was quite hard, but since both of us had a lot of experience using UNIX
+we felt quite comfortable with the task.
 
 >> Did you find that working on a particular part of the assignment gave
 >> you greater insight into some aspect of OS design?
+Especially writing to and reading from pipes, that was an aspect of the assignment
+that was very interesting.
 
 >> Were there any parts of the assignment that you felt were unnecessarily
 >> tedious or pointless?
+How to handle potential errors due to bad user input, that took us some time to understand.
 
 >> Is there some particular fact or hint we should give students in
 >> future quarters to help them solve the problems?  Conversely, did you
 >> find any of our guidance to be misleading?
+No, not really. Emphasize the value of understanding UNIX systems.
 
 >> Do you have any suggestions for the instructor and/or TAs to more
 >> effectively assist students, either for future quarters or the remaining
 >> projects?
+No.
 
 >> Any other comments?
+No.
