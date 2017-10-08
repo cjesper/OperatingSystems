@@ -152,6 +152,7 @@ int main(void)
 void interruptHandler(int sig) {
     // print newline for better output
     printf("\n");
+    signal(SIGINT, SIG_IGN);
 }
 
 /*
