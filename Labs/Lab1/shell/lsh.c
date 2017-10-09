@@ -153,10 +153,7 @@ int main(void)
                     if (!cmd.bakground) {
                         waitpid(pid, NULL, 0);
                     } else {
-                        /*signal(SIGCHLD, &childHandler);*/
-
                         sigaction(SIGCHLD, &sa, NULL);
-
                         printf("Command %s started in background with PID [%d]\n", cmd.pgm->pgmlist[0], pid);
                     }
 
