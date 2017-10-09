@@ -31,6 +31,8 @@
 /*
  * Function declarations
  */
+void interruptHandler(int);
+void childHandler(int);
 void PrintCommand(int, Command *);
 void PrintPgm(Pgm *);
 void stripwhite(char *);
@@ -50,8 +52,8 @@ int done = 0;
  * Ignore interrupt signal and print new line for better output.
  */
 void interruptHandler(int sig) {
-    printf("\n");
     signal(SIGINT, SIG_IGN);
+    printf("\n");
 }
 
 /*
