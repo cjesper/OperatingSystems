@@ -25,6 +25,7 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <ctype.h>
+#include <signal.h>
 #include "parse.h"
 
 /*
@@ -46,6 +47,21 @@ int done = 0;
 #define WRITE 1
 
 /*
+ * Ignore interrupt signal and print new line for better output.
+ */
+void interruptHandler(int sig) {
+    printf("\n");
+    signal(SIGINT, SIG_IGN);
+}
+
+/*
+ * Wait for termination in child to avoid zombie.
+ */
+void childHandler(int sig) {
+    while(waitpid((pid_t)-1, 0, WNOHANG) > 0){}
+}
+
+/*
  * Name: main
  *
  * Description: Gets the ball rolling...
@@ -64,6 +80,13 @@ int main(void)
 
     /* Register handler for interrupt */
     signal(SIGINT, interruptHandler);
+
+    /* Struct used to call childHandler in background processes,
+     * to avoid turning into zombies. */
+    struct sigaction sa;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = 0;
+    sa.sa_handler = childHandler;
 
     while (!done) {
         char *line;
@@ -128,7 +151,10 @@ int main(void)
                     if (!cmd.bakground) {
                         waitpid(pid, NULL, 0);
                     } else {
-                        signal(SIGCHLD, SIG_IGN);
+                        /*signal(SIGCHLD, &childHandler);*/
+
+                        sigaction(SIGCHLD, &sa, NULL);
+
                         printf("Command %s started in background with PID [%d]\n", cmd.pgm->pgmlist[0], pid);
                     }
 
@@ -146,14 +172,6 @@ int main(void)
     return 0;
 }
 
-/*
- * Does nothing on interrupt signal but prints new line for better output.
- */
-void interruptHandler(int sig) {
-    // print newline for better output
-    printf("\n");
-    signal(SIGINT, SIG_IGN);
-}
 
 /*
  * Recursive method for executing commands.
